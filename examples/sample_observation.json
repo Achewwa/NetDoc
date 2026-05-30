@@ -1,0 +1,16 @@
+{
+  "skill": "dns_diagnosis",
+  "status": "abnormal",
+  "checks": [
+    {
+      "name": "domain_resolution",
+      "success": false,
+      "evidence": "placeholder"
+    }
+  ],
+  "suggestions": [
+    "Flush DNS cache",
+    "Check VPN DNS settings"
+  ],
+  "risk_level": "low"
+}

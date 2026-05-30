@@ -1,0 +1,1 @@
+"""Service connectivity skill placeholder."""

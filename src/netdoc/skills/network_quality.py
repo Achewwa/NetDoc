@@ -1,0 +1,1 @@
+"""Network quality skill placeholder."""
