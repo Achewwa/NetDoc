@@ -6,6 +6,7 @@ import pytest
 
 from netdoc.core import SchemaValidationError, Skill, SkillRegistry
 from netdoc.skills import service_connectivity
+from netdoc.skills import dns_diagnosis
 from netdoc.skills import service_connectivity as service_skill
 from netdoc.skills import service_connectivity as service_skill_alias
 from netdoc.skills.service_connectivity import skill
@@ -56,6 +57,15 @@ def test_run_command_captures_output() -> None:
     assert not result.timed_out
 
 
+def test_run_command_reports_missing_executable() -> None:
+    result = run_command(["netdoc-command-that-does-not-exist"], timeout=2)
+
+    assert result.returncode == 127
+    assert result.stdout == ""
+    assert "No such file or directory" in result.stderr
+    assert not result.timed_out
+
+
 def test_service_connectivity_summarizes_https_up_ssh_down(monkeypatch: pytest.MonkeyPatch) -> None:
     module = __import__("netdoc.skills.service_connectivity", fromlist=[""])
 
@@ -102,3 +112,4 @@ def test_service_connectivity_rejects_invalid_port() -> None:
 def test_skills_init_exports_service_connectivity() -> None:
     assert service_connectivity is service_skill
     assert service_skill is service_skill_alias
+    assert dns_diagnosis.name == "dns_diagnosis"

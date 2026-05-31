@@ -74,9 +74,12 @@ def _planning_prompt(question: str, registry: SkillRegistry) -> str:
         "Available skill schemas:\n"
         f"{schemas}\n\n"
         "Return this JSON shape exactly:\n"
-        '{"skill":"service_connectivity","arguments":{...},"reason":"short reason"}\n\n'
+        '{"skill":"registered_skill_name","arguments":{...},"reason":"short reason"}\n\n'
+        "For DNS, domain resolution, nameserver or IP resolution questions, prefer "
+        'dns_diagnosis with a domain argument. '
         "For GitHub connectivity questions, prefer service_connectivity with host "
-        '"github.com", ports [443, 22], and protocols ["tcp", "https"].'
+        '"github.com", ports [443, 22], and protocols ["tcp", "https"], unless the '
+        "user specifically asks whether DNS resolution is working."
     )
 
 

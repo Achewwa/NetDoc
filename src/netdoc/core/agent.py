@@ -52,7 +52,8 @@ class NetDocAgent:
         response = self.llm.complete(
             system=(
                 "You are NetDoc's diagnosis explainer. Use only the JSON observation "
-                "as evidence. Answer in concise Chinese. Do not invent repair actions."
+                "as evidence. Answer in concise Chinese. State the conclusion first, "
+                "then cite the key checks and safe next steps. Do not invent repair actions."
             ),
             user=_synthesis_prompt(question, plan, observation),
             max_tokens=800,
@@ -69,9 +70,12 @@ def _synthesis_prompt(question: str, plan: SkillCall, observation: JsonDict) -> 
         f"{json.dumps(_skill_call_json(plan), ensure_ascii=False)}\n\n"
         "Observation JSON:\n"
         f"{json.dumps(observation, ensure_ascii=False, indent=2)}\n\n"
-        "If all checks succeeded, say GitHub is currently reachable and mention DNS, HTTPS, "
-        "and SSH are normal when those checks exist. If some checks failed, state the most "
-        "specific conclusion, such as HTTPS reachable but SSH unavailable."
+        "Write a short diagnosis report in Chinese. Include: conclusion, important evidence "
+        "from successful or failed checks, and low-risk next steps when the observation "
+        "supports them. If all checks succeeded, say the checked path is currently normal. "
+        "If some checks failed, state the most specific conclusion, such as DNS resolution "
+        "failure, DNS works but direct public-IP access fails, HTTPS reachable but SSH "
+        "unavailable, or only configuration visibility is incomplete."
     )
 
 

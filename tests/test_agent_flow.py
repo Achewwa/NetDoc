@@ -73,3 +73,52 @@ def test_agent_plans_executes_and_synthesizes(monkeypatch) -> None:
     assert result.plan.skill_name == "service_connectivity"
     assert result.observation["status"] == "abnormal"
     assert len(llm.prompts) == 2
+
+
+def test_agent_can_plan_dns_diagnosis(monkeypatch) -> None:
+    module = __import__("netdoc.skills.dns_diagnosis", fromlist=[""])
+    monkeypatch.setattr(
+        module,
+        "_dns_config_check",
+        lambda timeout: {
+            "name": "dns_config",
+            "success": True,
+            "latency_ms": None,
+            "evidence": "DNS config readable",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_resolve_domain",
+        lambda domain, timeout: {
+            "name": "dns_resolve",
+            "success": True,
+            "latency_ms": 2,
+            "evidence": f"{domain} resolved",
+            "details": {"addresses": ["93.184.216.34"]},
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_direct_public_ip_check",
+        lambda domain, ips, port, timeout, use_tls: {
+            "name": f"direct_public_ip_{port}",
+            "success": True,
+            "latency_ms": 3,
+            "evidence": "direct IP works",
+        },
+    )
+
+    llm = FakeLLM(
+        responses=[
+            '{"skill":"dns_diagnosis","arguments":{"domain":"example.com"},"reason":"check DNS"}',
+            "DNS 正常。",
+        ]
+    )
+    agent = NetDocAgent(registry=create_default_registry(), llm=llm)
+
+    result = agent.answer("example.com 能解析吗？")
+
+    assert result.answer == "DNS 正常。"
+    assert result.plan.skill_name == "dns_diagnosis"
+    assert result.observation["skill"] == "dns_diagnosis"

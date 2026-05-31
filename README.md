@@ -44,9 +44,10 @@ scripts/      本地开发和演示脚本。
 
 ## 当前状态
 
-项目已完成第一个可演示里程碑：`service_connectivity` Skill 和 LLM-backed agent
-命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM 规划 Skill 调用，
-执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation 生成中文诊断结论。
+项目已完成第一个可演示里程碑：`service_connectivity`、`dns_diagnosis` Skill 和
+LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM
+规划 Skill 调用，执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation
+生成中文诊断结论。
 
 已实现模块：
 
@@ -54,11 +55,12 @@ scripts/      本地开发和演示脚本。
 - `core.registry`：Skill 注册、查找和 schema 导出。
 - `core.llm`：Anthropic Messages 兼容 LLM 客户端，从环境变量读取配置。
 - `core.planner`：LLM 规划单次 Skill 调用。
-- `core.agent`：自然语言问题到 Skill observation 再到中文回答的控制流。
+- `core.agent`：用户输入、LLM JSON plan、Skill 调用、observation 收集、LLM 诊断报告的最小控制流。
 - `utils.command`：统一系统命令执行结果，包含 timeout、返回码、stdout、stderr。
 - `utils.platform`：Windows、Linux、WSL 平台判断。
 - `utils.json_types`：统一 observation/check JSON 结构。
 - `skills.service_connectivity`：检查目标主机 DNS、TCP 端口和 HTTPS/TLS 连通性。
+- `skills.dns_diagnosis`：检查当前 DNS 配置、域名解析耗时、解析结果 IP，以及直接公网 IP 访问对比。
 
 ## 本地运行
 
@@ -86,6 +88,12 @@ python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还
 
 ```sh
 python scripts/ask_agent.py --show-json
+```
+
+单独运行 DNS 诊断 Skill：
+
+```sh
+python scripts/run_dns_diagnosis.py github.com --timeout 3
 ```
 
 ## 测试方式
