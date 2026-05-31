@@ -7,6 +7,8 @@ import pytest
 from netdoc.core import SchemaValidationError, Skill, SkillRegistry
 from netdoc.skills import service_connectivity
 from netdoc.skills import dns_diagnosis
+from netdoc.skills import proxy_vpn_diagnosis
+from netdoc.skills import report_generator
 from netdoc.skills import service_connectivity as service_skill
 from netdoc.skills import service_connectivity as service_skill_alias
 from netdoc.skills.service_connectivity import skill
@@ -113,3 +115,5 @@ def test_skills_init_exports_service_connectivity() -> None:
     assert service_connectivity is service_skill
     assert service_skill is service_skill_alias
     assert dns_diagnosis.name == "dns_diagnosis"
+    assert proxy_vpn_diagnosis.name == "proxy_vpn_diagnosis"
+    assert report_generator.name == "report_generator"
