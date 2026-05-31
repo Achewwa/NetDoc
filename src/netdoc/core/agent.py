@@ -30,9 +30,24 @@ class AgentResult:
                 "arguments": self.plan.arguments,
                 "reason": self.plan.reason,
             },
+            "executed_steps": [
+                {
+                    "phase": "diagnosis",
+                    "skill": self.plan.skill_name,
+                    "arguments": self.plan.arguments,
+                    "observation_key": "observation",
+                }
+            ],
             "observation": self.observation,
         }
         if self.report_observation is not None:
+            result["executed_steps"].append(
+                {
+                    "phase": "report",
+                    "skill": "report_generator",
+                    "observation_key": "report_observation",
+                }
+            )
             result["report_observation"] = self.report_observation
         return result
 
@@ -62,8 +77,10 @@ class NetDocAgent:
         response = self.llm.complete(
             system=(
                 "You are NetDoc's diagnosis explainer. Use only the JSON observation "
-                "as evidence. Answer in concise Chinese. State the conclusion first, "
-                "then cite the key checks and safe next steps. Do not invent repair actions."
+                "as evidence. Answer in concise Chinese. Return plain text only, with no "
+                "Markdown headings, tables or bullet lists. Use at most 3 short sentences: "
+                "conclusion first, then at most two key evidence points or one safe next step. "
+                "Do not invent repair actions."
             ),
             user=_synthesis_prompt(question, plan, observation),
             max_tokens=800,
@@ -101,9 +118,10 @@ def _synthesis_prompt(question: str, plan: SkillCall, observation: JsonDict) -> 
         f"{json.dumps(_skill_call_json(plan), ensure_ascii=False)}\n\n"
         "Observation JSON:\n"
         f"{json.dumps(observation, ensure_ascii=False, indent=2)}\n\n"
-        "Write a short diagnosis report in Chinese. Include: conclusion, important evidence "
-        "from successful or failed checks, and low-risk next steps when the observation "
-        "supports them. If all checks succeeded, say the checked path is currently normal. "
+        "Write a concise Chinese diagnosis answer, not a report. Use plain text only, "
+        "no Markdown. Keep it within 3 short sentences. Include: conclusion, the most "
+        "important evidence from successful or failed checks, and one low-risk next step "
+        "only when the observation supports it. If all checks succeeded, say the checked path is currently normal. "
         "If some checks failed, state the most specific conclusion, such as DNS resolution "
         "failure, DNS works but direct public-IP access fails, HTTPS reachable but SSH "
         "unavailable, or only configuration visibility is incomplete."

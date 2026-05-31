@@ -80,6 +80,19 @@ def test_agent_plans_executes_and_synthesizes(monkeypatch) -> None:
         "report_markdown"
     ]
     assert result.to_dict()["report_observation"]["skill"] == "report_generator"
+    assert result.to_dict()["executed_steps"] == [
+        {
+            "phase": "diagnosis",
+            "skill": "service_connectivity",
+            "arguments": {"host": "github.com", "ports": [443, 22], "protocols": ["tcp", "https"]},
+            "observation_key": "observation",
+        },
+        {
+            "phase": "report",
+            "skill": "report_generator",
+            "observation_key": "report_observation",
+        },
+    ]
     assert len(llm.prompts) == 2
 
 
@@ -158,6 +171,6 @@ def test_ask_once_can_print_generated_report(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert "DNS 正常。" in captured.out
+    assert "DNS 正常。" not in captured.out
     assert "# NetDoc 网络诊断报告" in captured.out
     assert "## 每一步证据" in captured.out

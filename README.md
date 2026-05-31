@@ -88,7 +88,7 @@ export ANTHROPIC_MODEL="your-model"
 python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还是 SSH 问题？" --show-json
 ```
 
-`--show-json` 会展示主诊断 Skill 的 observation，并在诊断完成后附带
+`--show-json` 会展示 `executed_steps`、主诊断 Skill 的 observation，并在诊断完成后附带
 `report_generator` 生成的 `report_observation`。
 
 课程展示或报告材料准备时，可以直接打印 `report_generator` 的 Markdown 报告：
@@ -96,6 +96,8 @@ python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还
 ```sh
 python scripts/ask_agent.py "GitHub 通过代理访问失败，检查 Git proxy、系统代理、Clash 端口和 VPN 进程" --show-report
 ```
+
+使用 `--show-report` 时，终端只打印报告正文，不重复打印简短诊断答案。
 
 也可以进入交互模式：
 

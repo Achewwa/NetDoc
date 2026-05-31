@@ -68,12 +68,14 @@ def _ask_once(agent: NetDocAgent, question: str, *, show_json: bool, show_report
         print(f"诊断失败：{exc}", file=sys.stderr)
         return 1
 
-    print(result.answer)
     if show_report and result.report_observation is not None:
         report = _report_markdown(result.report_observation)
         if report:
-            print()
             print(report.rstrip())
+        else:
+            print(result.answer)
+    else:
+        print(result.answer)
     if show_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0

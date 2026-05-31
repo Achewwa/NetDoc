@@ -16,8 +16,14 @@ Current implemented flow:
 4. The LLM synthesizer explains the observation in concise Chinese.
 5. The agent calls `report_generator` to create a course-friendly Markdown report
    from the question, skill call, observation and final diagnosis.
-6. The CLI can show the concise answer, the generated report with `--show-report`,
-   and intermediate plan/observation/report JSON with `--show-json`.
+6. The CLI can show either the concise answer or the generated report with
+   `--show-report`, and intermediate `executed_steps`, plan, observation and report
+   JSON with `--show-json`.
+
+Current agent limitation: each turn plans one primary diagnosis skill, then calls
+`report_generator` as a deterministic finishing step. Future multi-step diagnosis
+should return a list of executed steps, where each diagnosis skill has its own
+arguments, observation and reason for the next step.
 
 ## Skill Set
 
