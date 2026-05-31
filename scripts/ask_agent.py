@@ -33,6 +33,11 @@ def main() -> int:
         action="store_true",
         help="Print plan and observation JSON after the answer.",
     )
+    parser.add_argument(
+        "--show-report",
+        action="store_true",
+        help="Print the report_generator Markdown report after the concise answer.",
+    )
     args = parser.parse_args()
 
     try:
@@ -47,11 +52,16 @@ def main() -> int:
         return 2
 
     if args.question:
-        return _ask_once(agent, " ".join(args.question), show_json=args.show_json)
-    return _interactive_loop(agent, show_json=args.show_json)
+        return _ask_once(
+            agent,
+            " ".join(args.question),
+            show_json=args.show_json,
+            show_report=args.show_report,
+        )
+    return _interactive_loop(agent, show_json=args.show_json, show_report=args.show_report)
 
 
-def _ask_once(agent: NetDocAgent, question: str, *, show_json: bool) -> int:
+def _ask_once(agent: NetDocAgent, question: str, *, show_json: bool, show_report: bool) -> int:
     try:
         result = agent.answer(question)
     except (LLMError, PlanningError, KeyError, ValueError) as exc:
@@ -59,12 +69,17 @@ def _ask_once(agent: NetDocAgent, question: str, *, show_json: bool) -> int:
         return 1
 
     print(result.answer)
+    if show_report and result.report_observation is not None:
+        report = _report_markdown(result.report_observation)
+        if report:
+            print()
+            print(report.rstrip())
     if show_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
 
-def _interactive_loop(agent: NetDocAgent, *, show_json: bool) -> int:
+def _interactive_loop(agent: NetDocAgent, *, show_json: bool, show_report: bool) -> int:
     print("NetDoc 交互模式，输入 exit 或 quit 退出。")
     while True:
         try:
@@ -76,7 +91,17 @@ def _interactive_loop(agent: NetDocAgent, *, show_json: bool) -> int:
             continue
         if question.lower() in {"exit", "quit"}:
             return 0
-        _ask_once(agent, question, show_json=show_json)
+        _ask_once(agent, question, show_json=show_json, show_report=show_report)
+
+
+def _report_markdown(report_observation: dict[str, object]) -> str:
+    metadata = report_observation.get("metadata")
+    if not isinstance(metadata, dict):
+        return ""
+    report = metadata.get("report_markdown")
+    if not isinstance(report, str):
+        return ""
+    return report
 
 
 if __name__ == "__main__":

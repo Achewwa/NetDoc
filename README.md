@@ -15,8 +15,9 @@ NetDoc 旨在帮助用户诊断常见网络问题，例如网速过慢、DNS 解
 3. 执行 Python 或系统命令完成网络检查。
 4. 返回结构化 JSON 观测结果。
 5. 使用大语言模型综合证据，生成诊断结论和修复计划。
-6. 自动执行低风险修复，或在高风险操作前请求用户确认。
-7. 复测网络状态并生成可读诊断报告。
+6. 调用 `report_generator` 汇总用户问题、Skill 调用、证据和结论，生成展示报告。
+7. 自动执行低风险修复，或在高风险操作前请求用户确认。
+8. 复测网络状态并更新可读诊断报告。
 
 ## 计划中的 Skill
 
@@ -56,7 +57,7 @@ LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言
 - `core.registry`：Skill 注册、查找和 schema 导出。
 - `core.llm`：Anthropic Messages 兼容 LLM 客户端，从环境变量读取配置。
 - `core.planner`：LLM 规划单次 Skill 调用。
-- `core.agent`：用户输入、LLM JSON plan、Skill 调用、observation 收集、LLM 诊断报告的最小控制流。
+- `core.agent`：用户输入、LLM JSON plan、诊断 Skill 调用、observation 收集、LLM 诊断回答和 `report_generator` 收尾报告的最小控制流。
 - `utils.command`：统一系统命令执行结果，包含 timeout、返回码、stdout、stderr。
 - `utils.platform`：Windows、Linux、WSL 平台判断。
 - `utils.json_types`：统一 observation/check JSON 结构。
@@ -85,6 +86,15 @@ export ANTHROPIC_MODEL="your-model"
 
 ```sh
 python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还是 SSH 问题？" --show-json
+```
+
+`--show-json` 会展示主诊断 Skill 的 observation，并在诊断完成后附带
+`report_generator` 生成的 `report_observation`。
+
+课程展示或报告材料准备时，可以直接打印 `report_generator` 的 Markdown 报告：
+
+```sh
+python scripts/ask_agent.py "GitHub 通过代理访问失败，检查 Git proxy、系统代理、Clash 端口和 VPN 进程" --show-report
 ```
 
 也可以进入交互模式：

@@ -14,7 +14,10 @@ Current implemented flow:
 2. The LLM planner selects one registered Skill and returns JSON arguments.
 3. Python executes the Skill and collects JSON-compatible evidence.
 4. The LLM synthesizer explains the observation in concise Chinese.
-5. The CLI can show both the final answer and intermediate plan/observation JSON.
+5. The agent calls `report_generator` to create a course-friendly Markdown report
+   from the question, skill call, observation and final diagnosis.
+6. The CLI can show the concise answer, the generated report with `--show-report`,
+   and intermediate plan/observation/report JSON with `--show-json`.
 
 ## Skill Set
 

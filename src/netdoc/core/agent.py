@@ -19,10 +19,11 @@ class AgentResult:
     answer: str
     plan: SkillCall
     observation: JsonDict
+    report_observation: JsonDict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible representation for CLI debug output."""
-        return {
+        result: dict[str, Any] = {
             "answer": self.answer,
             "plan": {
                 "skill": self.plan.skill_name,
@@ -31,6 +32,9 @@ class AgentResult:
             },
             "observation": self.observation,
         }
+        if self.report_observation is not None:
+            result["report_observation"] = self.report_observation
+        return result
 
 
 @dataclass(frozen=True)
@@ -46,7 +50,13 @@ class NetDocAgent:
         plan = planner.plan(question, self.registry)
         observation = self.registry.get(plan.skill_name).run(plan.arguments)
         answer = self._synthesize(question, plan, observation)
-        return AgentResult(answer=answer, plan=plan, observation=observation)
+        report_observation = self._generate_report(question, plan, observation, answer)
+        return AgentResult(
+            answer=answer,
+            plan=plan,
+            observation=observation,
+            report_observation=report_observation,
+        )
 
     def _synthesize(self, question: str, plan: SkillCall, observation: JsonDict) -> str:
         response = self.llm.complete(
@@ -60,6 +70,27 @@ class NetDocAgent:
             temperature=0.0,
         )
         return response.strip()
+
+    def _generate_report(
+        self,
+        question: str,
+        plan: SkillCall,
+        observation: JsonDict,
+        answer: str,
+    ) -> JsonDict | None:
+        if plan.skill_name == "report_generator" or not self.registry.has("report_generator"):
+            return None
+        return self.registry.get("report_generator").run(
+            {
+                "user_question": question,
+                "skill_calls": [_skill_call_json(plan)],
+                "observations": [observation],
+                "diagnosis_conclusion": answer,
+                "repair_actions": [],
+                "retest_results": [],
+                "unresolved_issues": [],
+            }
+        )
 
 
 def _synthesis_prompt(question: str, plan: SkillCall, observation: JsonDict) -> str:
