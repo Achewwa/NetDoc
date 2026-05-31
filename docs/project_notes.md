@@ -14,7 +14,16 @@ Current implemented flow:
 2. The LLM planner selects one registered Skill and returns JSON arguments.
 3. Python executes the Skill and collects JSON-compatible evidence.
 4. The LLM synthesizer explains the observation in concise Chinese.
-5. The CLI can show both the final answer and intermediate plan/observation JSON.
+5. The agent calls `report_generator` to create a course-friendly Markdown report
+   from the question, skill call, observation and final diagnosis.
+6. The CLI can show either the concise answer or the generated report with
+   `--show-report`, and intermediate `executed_steps`, plan, observation and report
+   JSON with `--show-json`.
+
+Current agent limitation: each turn plans one primary diagnosis skill, then calls
+`report_generator` as a deterministic finishing step. Future multi-step diagnosis
+should return a list of executed steps, where each diagnosis skill has its own
+arguments, observation and reason for the next step.
 
 ## Skill Set
 
@@ -35,11 +44,13 @@ The first end-to-end milestone is complete:
 
 - Core abstractions: `Skill`, schema validation, `SkillRegistry`.
 - Utilities: command execution, platform detection, shared JSON observation types.
-- Real Skills: `service_connectivity`, `dns_diagnosis`.
+- Real Skills: `service_connectivity`, `dns_diagnosis`, `proxy_vpn_diagnosis`,
+  `report_generator`.
 - LLM-backed controller: planner, agent and synthesizer.
 - CLI entry points:
   - `scripts/run_dns_diagnosis.py`
   - `scripts/run_service_connectivity.py`
+  - `scripts/run_proxy_vpn_diagnosis.py`
   - `scripts/ask_agent.py`
 
 `dns_diagnosis` currently checks the local DNS configuration, resolves a target domain
@@ -59,4 +70,35 @@ Validated real interaction:
 ```text
 Question: github连接不上
 Result: GitHub is currently reachable; DNS, HTTPS and SSH checks are normal.
+```
+
+Additional proxy/VPN interaction validation:
+
+```text
+Question: GitHub 通过 Clash/VPN 代理访问失败，帮我检查是不是系统代理、Git proxy、代理端口或 VPN 进程的问题
+Expected plan: proxy_vpn_diagnosis
+Observed result: The planner selected proxy_vpn_diagnosis. The observation contained
+environment proxy, Git proxy, system proxy, common proxy ports, target access through
+proxy and Clash/VPN process checks. In the misleading GitHub scenario, GitHub access
+through the WSL host proxy succeeded, so the answer correctly treated the reported
+failure as not reproduced on the checked path.
+```
+
+```text
+Question: google.com 通过 Clash/VPN 代理访问失败，帮我检查问题
+Expected plan: proxy_vpn_diagnosis
+Observed result: The planner selected proxy_vpn_diagnosis. With Clash set to direct
+mode or otherwise unable to proxy the target, the target access check failed with
+curl connection reset evidence and the final answer localized the proxy path failure.
+```
+
+```text
+Setup: git config --local http.proxy http://127.0.0.1:7897 and
+git config --local https.proxy http://127.0.0.1:7897
+Question: GitHub 通过代理访问失败，检查 Git proxy、系统代理、Clash 端口和 VPN 进程
+Expected plan: proxy_vpn_diagnosis
+Observed result: The planner selected proxy_vpn_diagnosis. The observation captured
+local Git proxy entries pointing at 127.0.0.1:7897, detected that the configured port
+was not listening, and the final answer identified stale Git proxy configuration.
+Cleanup: git config --local --unset http.proxy and git config --local --unset https.proxy.
 ```

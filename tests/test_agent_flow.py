@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from netdoc.core import NetDocAgent
 from netdoc.skills import create_default_registry
+from scripts.ask_agent import _ask_once
 
 
 @dataclass
@@ -72,6 +73,26 @@ def test_agent_plans_executes_and_synthesizes(monkeypatch) -> None:
     assert result.answer == "HTTPS 可达，但 SSH 端口不可达。"
     assert result.plan.skill_name == "service_connectivity"
     assert result.observation["status"] == "abnormal"
+    assert result.report_observation is not None
+    assert result.report_observation["skill"] == "report_generator"
+    assert result.report_observation["metadata"]["called_skills"] == ["service_connectivity"]
+    assert "HTTPS 可达，但 SSH 端口不可达。" in result.report_observation["metadata"][
+        "report_markdown"
+    ]
+    assert result.to_dict()["report_observation"]["skill"] == "report_generator"
+    assert result.to_dict()["executed_steps"] == [
+        {
+            "phase": "diagnosis",
+            "skill": "service_connectivity",
+            "arguments": {"host": "github.com", "ports": [443, 22], "protocols": ["tcp", "https"]},
+            "observation_key": "observation",
+        },
+        {
+            "phase": "report",
+            "skill": "report_generator",
+            "observation_key": "report_observation",
+        },
+    ]
     assert len(llm.prompts) == 2
 
 
@@ -122,3 +143,34 @@ def test_agent_can_plan_dns_diagnosis(monkeypatch) -> None:
     assert result.answer == "DNS 正常。"
     assert result.plan.skill_name == "dns_diagnosis"
     assert result.observation["skill"] == "dns_diagnosis"
+    assert result.report_observation is not None
+    assert result.report_observation["skill"] == "report_generator"
+
+
+def test_ask_once_can_print_generated_report(capsys) -> None:
+    class FakeResult:
+        answer = "DNS 正常。"
+        report_observation = {
+            "skill": "report_generator",
+            "metadata": {
+                "report_markdown": "# NetDoc 网络诊断报告\n\n## 每一步证据\n- dns_resolve 通过"
+            },
+        }
+
+    class FakeAgent:
+        def answer(self, question: str):
+            return FakeResult()
+
+    exit_code = _ask_once(
+        FakeAgent(),
+        "example.com 能解析吗？",
+        show_json=False,
+        show_report=True,
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "DNS 正常。" not in captured.out
+    assert "# NetDoc 网络诊断报告" in captured.out
+    assert "## 每一步证据" in captured.out

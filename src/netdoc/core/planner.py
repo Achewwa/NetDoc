@@ -79,7 +79,10 @@ def _planning_prompt(question: str, registry: SkillRegistry) -> str:
         'dns_diagnosis with a domain argument. '
         "For GitHub connectivity questions, prefer service_connectivity with host "
         '"github.com", ports [443, 22], and protocols ["tcp", "https"], unless the '
-        "user specifically asks whether DNS resolution is working."
+        "user specifically asks whether DNS resolution is working. For proxy, VPN, "
+        "Clash, system proxy, Git proxy, http_proxy or https_proxy questions, prefer "
+        "proxy_vpn_diagnosis. Use report_generator only when the user asks to produce "
+        "or summarize a diagnosis report from existing observations."
     )
 
 
