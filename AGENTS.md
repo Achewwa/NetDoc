@@ -27,11 +27,8 @@ NetDoc should separate responsibilities clearly:
 4. `proxy_vpn_diagnosis`: system proxy, proxy process/port and VPN adapter/process checks.
 5. `service_connectivity`: host/port/protocol reachability checks.
 6. `network_quality`: latency, packet loss, jitter and speed-related checks.
-
-Optional later modules:
-
-- `repair_actions`: low-risk repair operations with risk labels.
-- `report_generator`: diagnosis report generation for demos and course submission.
+7. `repair_actions`: low-risk repair operations with risk labels, such as flushing DNS, restarting proxy-related processes or clearing stale system proxy settings.
+8. `report_generator`: diagnosis report generation for demos and course submission, including evidence, conclusions, repair actions and verification results.
 
 ## Engineering Principles
 
@@ -44,6 +41,7 @@ Optional later modules:
 
 ## Git Notes
 
-- Remote repository: `https://github.com/Achewwa/NetDoc`
+- Remote repository: `git@github.com:Achewwa/NetDoc.git`
+- WSL uses a dedicated GitHub SSH key at `/home/achewwa/.ssh/id_ed25519_netdoc`, selected through `/home/achewwa/.ssh/config`.
 - Default working branch convention for Codex-created work: `codex/<short-description>` unless the user requests direct work on `main`.
 - Do not commit `assignment.pdf`; it is local course context.
