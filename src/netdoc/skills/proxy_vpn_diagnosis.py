@@ -280,6 +280,9 @@ def _wsl_system_proxy_check(timeout_seconds: float) -> tuple[CheckResult, list[d
 
     values = _parse_windows_proxy_stdout(result.stdout)
     endpoints, malformed = _parse_proxy_values(values, source="system")
+    for endpoint in endpoints:
+        if _is_local_host(str(endpoint.get("host", ""))):
+            endpoint["diagnostic_scope"] = "windows_host"
     return _system_proxy_result(values, endpoints, malformed, details)
 
 
@@ -367,12 +370,20 @@ def _common_proxy_ports_check(
     endpoints: list[dict[str, Any]],
     timeout_seconds: float,
 ) -> CheckResult:
+    probed_local_endpoints = [
+        item
+        for item in endpoints
+        if isinstance(item.get("port"), int) and _should_probe_as_local_port(item)
+    ]
+    skipped_local_endpoints = [
+        item
+        for item in endpoints
+        if isinstance(item.get("port"), int)
+        and _is_local_host(str(item.get("host", "")))
+        and not _should_probe_as_local_port(item)
+    ]
     configured_local_ports = sorted(
-        {
-            int(item["port"])
-            for item in endpoints
-            if isinstance(item.get("port"), int) and _is_local_host(str(item.get("host", "")))
-        }
+        {int(item["port"]) for item in probed_local_endpoints}
     )
     ports = sorted(set(common_ports) | set(configured_local_ports))
     results = {
@@ -389,7 +400,11 @@ def _common_proxy_ports_check(
             "common_proxy_ports",
             False,
             "代理配置指向本机端口，但端口未监听: " + ", ".join(map(str, stale_ports)),
-            details={"ports": results, "configured_local_ports": configured_local_ports},
+            details={
+                "ports": results,
+                "configured_local_ports": configured_local_ports,
+                "skipped_local_endpoints": skipped_local_endpoints,
+            },
         )
 
     listening = [port for port, result in results.items() if result.get("listening")]
@@ -398,14 +413,34 @@ def _common_proxy_ports_check(
             "common_proxy_ports",
             True,
             "发现常见代理端口正在监听: " + ", ".join(listening),
-            details={"ports": results, "configured_local_ports": configured_local_ports},
+            details={
+                "ports": results,
+                "configured_local_ports": configured_local_ports,
+                "skipped_local_endpoints": skipped_local_endpoints,
+            },
+        )
+
+    if skipped_local_endpoints:
+        return make_check(
+            "common_proxy_ports",
+            True,
+            "常见 WSL 本机代理端口未监听；Windows 系统代理 localhost 端口不在 WSL 内直接判定。",
+            details={
+                "ports": results,
+                "configured_local_ports": configured_local_ports,
+                "skipped_local_endpoints": skipped_local_endpoints,
+            },
         )
 
     return make_check(
         "common_proxy_ports",
         True,
         "常见代理端口未监听；若没有启用本机代理，这属于正常状态。",
-        details={"ports": results, "configured_local_ports": configured_local_ports},
+        details={
+            "ports": results,
+            "configured_local_ports": configured_local_ports,
+            "skipped_local_endpoints": skipped_local_endpoints,
+        },
     )
 
 
@@ -664,10 +699,13 @@ def _try_connect(host: str, port: int, timeout_seconds: float) -> dict[str, Any]
 
 
 def _select_proxy_endpoint(endpoints: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if not endpoints:
+    usable_endpoints = [
+        endpoint for endpoint in endpoints if endpoint.get("diagnostic_scope") != "windows_host"
+    ]
+    if not usable_endpoints:
         return None
     priority = {"https_proxy": 0, "HTTPS_PROXY": 0, "http_proxy": 1, "HTTP_PROXY": 1}
-    return sorted(endpoints, key=lambda item: priority.get(str(item.get("name")), 10))[0]
+    return sorted(usable_endpoints, key=lambda item: priority.get(str(item.get("name")), 10))[0]
 
 
 def _find_process_matches(stdout: str) -> list[dict[str, str]]:
@@ -675,9 +713,12 @@ def _find_process_matches(stdout: str) -> list[dict[str, str]]:
     seen: set[tuple[str, str]] = set()
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
-        folded = line.casefold()
+        if not line or line.startswith("PID ") or line.startswith("Image Name"):
+            continue
+        candidates = _process_name_candidates(line)
+        folded_candidates = [candidate.casefold() for candidate in candidates if candidate]
         for keyword in PROCESS_KEYWORDS:
-            if keyword in folded:
+            if any(keyword in candidate for candidate in folded_candidates):
                 key = (keyword, line)
                 if key not in seen:
                     seen.add(key)
@@ -711,6 +752,13 @@ def _summarize(checks: list[CheckResult], endpoints: list[dict[str, Any]]) -> st
         return "代理配置指向本机端口，但对应端口未监听，疑似残留代理配置或代理客户端未启动。"
     if endpoints and github_check and not github_check["success"]:
         return "已发现代理配置，但通过代理访问 GitHub 失败，需检查代理/VPN 客户端或出口节点。"
+    if (
+        endpoints
+        and github_check
+        and github_check["success"]
+        and github_check["evidence"].startswith("未发现可用于测试")
+    ):
+        return "仅发现当前运行环境不可直接测试的系统代理配置，未发现 WSL 本机代理端口或进程异常。"
     if endpoints and github_check and github_check["success"]:
         return "代理配置存在，常见代理端口和 GitHub 代理访问检查未发现异常。"
     return "未发现会影响 GitHub 的代理/VPN 异常配置。"
@@ -733,6 +781,21 @@ def _find_check(
 
 def _is_local_host(host: str) -> bool:
     return host.casefold() in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _should_probe_as_local_port(endpoint: dict[str, Any]) -> bool:
+    if not _is_local_host(str(endpoint.get("host", ""))):
+        return False
+    return endpoint.get("diagnostic_scope") != "windows_host"
+
+
+def _process_name_candidates(line: str) -> list[str]:
+    parts = line.split(maxsplit=2)
+    if len(parts) >= 3 and parts[0].isdigit():
+        command = parts[1]
+        executable = os.path.basename(parts[2].split(maxsplit=1)[0])
+        return [command, executable]
+    return [os.path.basename(parts[0])]
 
 
 def _command_details(result: CommandResult) -> dict[str, Any]:

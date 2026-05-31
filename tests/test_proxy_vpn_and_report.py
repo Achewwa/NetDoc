@@ -105,6 +105,96 @@ def test_proxy_vpn_diagnosis_is_normal_without_proxy_config(
     assert observation["metadata"]["configured_proxy_endpoints"] == []
 
 
+def test_proxy_vpn_diagnosis_skips_wsl_windows_system_proxy_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = __import__("netdoc.skills.proxy_vpn_diagnosis", fromlist=[""])
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "_git_proxy_check",
+        lambda timeout: (make_check("git_proxy_config", True, "no git proxy"), []),
+    )
+    monkeypatch.setattr(
+        module,
+        "_system_proxy_check",
+        lambda timeout: (
+            make_check("system_proxy_config", True, "windows proxy"),
+            [
+                {
+                    "source": "system",
+                    "name": "system.proxy_server_0",
+                    "value": "127.0.0.1:7890",
+                    "url": "http://127.0.0.1:7890",
+                    "scheme": "http",
+                    "host": "127.0.0.1",
+                    "port": 7890,
+                    "diagnostic_scope": "windows_host",
+                }
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_port_probe_result",
+        lambda port, timeout: {"listening": False, "attempts": []},
+    )
+    monkeypatch.setattr(
+        module,
+        "_github_via_proxy_check",
+        lambda target_url, endpoints, timeout: make_check(
+            "github_via_proxy",
+            True,
+            "未发现可用于测试的代理配置，跳过通过代理访问 GitHub。",
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_proxy_vpn_process_check",
+        lambda timeout: make_check("clash_vpn_processes", True, "no process"),
+    )
+
+    observation = proxy_skill.run({"common_proxy_ports": [7890]})
+    port_check = observation["checks"][3]
+
+    assert observation["status"] == "normal"
+    assert observation["summary"] == (
+        "仅发现当前运行环境不可直接测试的系统代理配置，未发现 WSL 本机代理端口或进程异常。"
+    )
+    assert port_check["success"]
+    assert port_check["details"]["configured_local_ports"] == []
+    assert port_check["details"]["skipped_local_endpoints"][0]["diagnostic_scope"] == "windows_host"
+
+
+def test_proxy_vpn_diagnosis_skips_windows_host_proxy_for_wsl_target_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = __import__("netdoc.skills.proxy_vpn_diagnosis", fromlist=[""])
+
+    def fail_run_command(*args, **kwargs):
+        raise AssertionError("curl should not run for Windows-host-only proxy endpoints")
+
+    monkeypatch.setattr(module, "run_command", fail_run_command)
+
+    check = module._github_via_proxy_check(
+        "https://github.com",
+        [
+            {
+                "source": "system",
+                "name": "system.proxy_server_0",
+                "url": "http://127.0.0.1:7890",
+                "host": "127.0.0.1",
+                "port": 7890,
+                "diagnostic_scope": "windows_host",
+            }
+        ],
+        1.0,
+    )
+
+    assert check["success"]
+    assert "跳过" in check["evidence"]
+
+
 def test_proxy_vpn_diagnosis_parses_git_proxy_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -131,6 +221,34 @@ def test_proxy_vpn_diagnosis_parses_git_proxy_command(
             "port": 7890,
         }
     ]
+
+
+def test_proxy_vpn_process_check_ignores_keyword_in_python_arguments() -> None:
+    module = __import__("netdoc.skills.proxy_vpn_diagnosis", fromlist=[""])
+    stdout = "\n".join(
+        [
+            "    PID COMMAND         COMMAND",
+            " 157525 python          python scripts/ask_agent.py check Clash proxy",
+            " 157526 conda           conda run python scripts/ask_agent.py VPN",
+        ]
+    )
+
+    assert module._find_process_matches(stdout) == []
+
+
+def test_proxy_vpn_process_check_matches_real_proxy_binary() -> None:
+    module = __import__("netdoc.skills.proxy_vpn_diagnosis", fromlist=[""])
+    stdout = "\n".join(
+        [
+            "    PID COMMAND         COMMAND",
+            " 157700 clash           /usr/bin/clash -d /tmp/profile",
+            " 157701 mihomo          /usr/local/bin/mihomo -f config.yaml",
+        ]
+    )
+
+    matches = module._find_process_matches(stdout)
+
+    assert [match["keyword"] for match in matches] == ["clash", "mihomo"]
 
 
 def test_proxy_vpn_diagnosis_rejects_invalid_ports() -> None:

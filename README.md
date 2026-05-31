@@ -118,3 +118,16 @@ python scripts/run_proxy_vpn_diagnosis.py --timeout 3
 用户：github连接不上
 NetDoc：GitHub 目前网络连接完全正常，DNS、HTTPS 和 SSH 检查均正常。
 ```
+
+新增代理/VPN 真实交互场景：
+
+```text
+用户：GitHub 通过 Clash/VPN 代理访问失败，检查系统代理、Git proxy、代理端口和 VPN 进程
+NetDoc：选择 proxy_vpn_diagnosis，输出环境变量代理、Git proxy、系统代理、常见端口、通过代理访问目标和 Clash/VPN 进程证据。
+
+用户：google.com 通过 Clash/VPN 代理访问失败，帮我检查问题
+NetDoc：选择 proxy_vpn_diagnosis，在 Clash 直连或代理路径异常场景下定位代理访问失败证据。
+
+用户：GitHub 通过代理访问失败，检查 Git proxy、系统代理、Clash 端口和 VPN 进程
+NetDoc：选择 proxy_vpn_diagnosis，在 Git local proxy 指向未监听端口时定位残留 Git proxy 配置。
+```
