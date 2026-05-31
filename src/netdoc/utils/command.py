@@ -42,6 +42,14 @@ def run_command(
             text=True,
             timeout=timeout,
         )
+    except FileNotFoundError as exc:
+        return CommandResult(
+            command=command,
+            returncode=127,
+            stdout="",
+            stderr=str(exc),
+            timed_out=False,
+        )
     except subprocess.TimeoutExpired as exc:
         return CommandResult(
             command=command,

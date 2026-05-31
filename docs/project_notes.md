@@ -35,11 +35,17 @@ The first end-to-end milestone is complete:
 
 - Core abstractions: `Skill`, schema validation, `SkillRegistry`.
 - Utilities: command execution, platform detection, shared JSON observation types.
-- First real Skill: `service_connectivity`.
+- Real Skills: `service_connectivity`, `dns_diagnosis`.
 - LLM-backed controller: planner, agent and synthesizer.
 - CLI entry points:
+  - `scripts/run_dns_diagnosis.py`
   - `scripts/run_service_connectivity.py`
   - `scripts/ask_agent.py`
+
+`dns_diagnosis` currently checks the local DNS configuration, resolves a target domain
+with Python `socket.getaddrinfo()`, records resolution latency and IP addresses, falls
+back to `nslookup` when Python resolution fails, and compares direct access to resolved
+public IPs.
 
 ## Test Policy
 
