@@ -44,4 +44,60 @@ scripts/      本地开发和演示脚本。
 
 ## 当前状态
 
-项目目前处于初始化阶段。第一个里程碑是实现 Skill 注册机制和一条端到端诊断路径，优先考虑 DNS 诊断或服务连通性诊断，然后再扩展到完整的八类 Skill。
+项目已完成第一个可演示里程碑：`service_connectivity` Skill 和 LLM-backed agent
+命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM 规划 Skill 调用，
+执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation 生成中文诊断结论。
+
+已实现模块：
+
+- `core.skill`：Skill 抽象和轻量 JSON Schema 输入校验。
+- `core.registry`：Skill 注册、查找和 schema 导出。
+- `core.llm`：Anthropic Messages 兼容 LLM 客户端，从环境变量读取配置。
+- `core.planner`：LLM 规划单次 Skill 调用。
+- `core.agent`：自然语言问题到 Skill observation 再到中文回答的控制流。
+- `utils.command`：统一系统命令执行结果，包含 timeout、返回码、stdout、stderr。
+- `utils.platform`：Windows、Linux、WSL 平台判断。
+- `utils.json_types`：统一 observation/check JSON 结构。
+- `skills.service_connectivity`：检查目标主机 DNS、TCP 端口和 HTTPS/TLS 连通性。
+
+## 本地运行
+
+安装开发依赖：
+
+```sh
+python -m pip install -e ".[dev]"
+```
+
+配置 LLM：
+
+```sh
+export ANTHROPIC_AUTH_TOKEN="your-token"
+export ANTHROPIC_BASE_URL="https://cc.580ai.net"
+export ANTHROPIC_MODEL="your-model"
+```
+
+运行 agent：
+
+```sh
+python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还是 SSH 问题？" --show-json
+```
+
+也可以进入交互模式：
+
+```sh
+python scripts/ask_agent.py --show-json
+```
+
+## 测试方式
+
+后续每个里程碑都按两类测试推进：
+
+1. 测试脚本：用 `pytest` 覆盖 schema 校验、registry、Skill 逻辑和 agent 控制流。
+2. 真实场景：通过 `scripts/ask_agent.py` 做交互式验证，确认 LLM 规划、真实网络检查和最终回答一致。
+
+当前已通过的真实场景示例：
+
+```text
+用户：github连接不上
+NetDoc：GitHub 目前网络连接完全正常，DNS、HTTPS 和 SSH 检查均正常。
+```
