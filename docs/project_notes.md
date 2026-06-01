@@ -21,9 +21,18 @@ Current implemented flow:
    JSON with `--show-json`.
 
 Current agent limitation: each turn plans one primary diagnosis skill, then calls
-`report_generator` as a deterministic finishing step. Future multi-step diagnosis
-should return a list of executed steps, where each diagnosis skill has its own
-arguments, observation and reason for the next step.
+`report_generator` as a deterministic finishing step. The current result shape is:
+
+- `plan.mode`: `single_step`
+- `plan.skill`: the single primary diagnosis skill selected by the LLM
+- `observation`: the primary diagnosis skill observation
+- `report_observation`: the deterministic `report_generator` output
+- `executed_steps`: the actual diagnosis and report steps, including each step's
+  phase, step number, skill, arguments, reason, observation key, and next action.
+
+Future multi-step diagnosis should switch to `plan.mode = "multi_step"` and return
+`observations: []`, where each diagnosis skill has its own arguments, observation,
+reason for continuing or stopping, and `observation_key` such as `observations[0]`.
 
 ## Skill Set
 
@@ -40,18 +49,31 @@ NetDoc currently plans eight skills:
 
 ## Implemented Milestone
 
-The first end-to-end milestone is complete:
+The first end-to-end milestone is complete, and the lower-level link/routing
+diagnosis milestone has also been implemented:
 
 - Core abstractions: `Skill`, schema validation, `SkillRegistry`.
 - Utilities: command execution, platform detection, shared JSON observation types.
-- Real Skills: `service_connectivity`, `dns_diagnosis`, `proxy_vpn_diagnosis`,
-  `report_generator`.
+- Real Skills: `link_status`, `routing_diagnosis`, `service_connectivity`,
+  `dns_diagnosis`, `proxy_vpn_diagnosis`, `report_generator`.
 - LLM-backed controller: planner, agent and synthesizer.
 - CLI entry points:
+  - `scripts/run_link_status.py`
   - `scripts/run_dns_diagnosis.py`
+  - `scripts/run_routing_diagnosis.py`
   - `scripts/run_service_connectivity.py`
   - `scripts/run_proxy_vpn_diagnosis.py`
   - `scripts/ask_agent.py`
+
+`link_status` checks active non-loopback adapters, usable IP addresses, default
+gateways and gateway reachability. In WSL, gateway checks treat a failed ICMP ping
+plus a valid neighbor-table MAC entry as link-layer reachability evidence so that
+firewall or NAT ICMP behavior is not overreported as a broken gateway.
+
+`routing_diagnosis` checks default routes, multiple active interfaces, VPN-like
+virtual adapters, WSL gateway reachability and default-route priority problems such
+as duplicated best metrics, missing metrics and default routes pointing at disabled
+interfaces.
 
 `dns_diagnosis` currently checks the local DNS configuration, resolves a target domain
 with Python `socket.getaddrinfo()`, records resolution latency and IP addresses, falls
@@ -101,4 +123,34 @@ Observed result: The planner selected proxy_vpn_diagnosis. The observation captu
 local Git proxy entries pointing at 127.0.0.1:7897, detected that the configured port
 was not listening, and the final answer identified stale Git proxy configuration.
 Cleanup: git config --local --unset http.proxy and git config --local --unset https.proxy.
+```
+
+Additional link/routing validation:
+
+```text
+Question: 帮我检查当前网卡是否启用、IP是否有效、默认网关是否存在和网关是否可达
+Expected plan: link_status
+Observed script baseline: `scripts/run_link_status.py --timeout 2` returned normal
+status on WSL, with eth0 enabled, a usable 172.22.x.x address, default gateway
+172.22.0.1 and gateway reachability inferred from the neighbor table when ICMP did
+not reply.
+```
+
+```text
+Question: 检查默认路由、多网卡、VPN虚拟网卡、WSL网关和异常路由优先级
+Expected plan: routing_diagnosis
+Observed script baseline: `scripts/run_routing_diagnosis.py --timeout 2` returned
+normal status on WSL, with one active interface, no VPN-like interface, a valid
+default route and no duplicate best default metric.
+```
+
+```text
+Setup: Linux network namespace with veth pairs and optional tun0.
+Validated abnormal scenarios: missing default gateway, default gateway present but
+unreachable, multiple active interfaces, duplicated default-route metric and VPN-like
+tun0 virtual adapter.
+Expected result: link_status and routing_diagnosis surface the corresponding failed
+or evidence-bearing checks while keeping all observations JSON-compatible.
+Cleanup: `sudo ip netns del netdoc_test` and remove any remaining host-side veth
+devices such as nd-host or nd2-host.
 ```
