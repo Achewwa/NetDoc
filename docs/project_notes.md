@@ -11,28 +11,34 @@ NetDoc uses Python skills to collect network evidence and JSON observations to c
 Current implemented flow:
 
 1. User asks a natural-language network question.
-2. The LLM planner selects one registered Skill and returns JSON arguments.
-3. Python executes the Skill and collects JSON-compatible evidence.
-4. The LLM synthesizer explains the observation in concise Chinese.
-5. The agent calls `report_generator` to create a course-friendly Markdown report
-   from the question, skill call, observation and final diagnosis.
-6. The CLI can show either the concise answer or the generated report with
+2. The LLM planner returns an ordered list of candidate diagnostic Skills and JSON
+   arguments.
+3. Python executes the diagnostic candidates and collects JSON-compatible evidence.
+4. If observations prove an abnormal condition, the agent deterministically maps
+   the abnormal layer to a risk-gated `repair_actions` call when a safe mapping
+   exists.
+5. If repair is actually executed, the agent retests with the original diagnostic
+   Skill. Dry-run or blocked repairs are reported as advice rather than state changes.
+6. The LLM synthesizer explains the observations, repair status, retest and
+   unresolved issues in concise Chinese.
+7. The agent calls `report_generator` to create a course-friendly Markdown report
+   from the question, skill calls, observations and final diagnosis.
+8. The CLI can show either the concise answer or the generated report with
    `--show-report`, and intermediate `executed_steps`, plan, observation and report
-   JSON with `--show-json`.
+   JSON with `--show-json`. When JSON output is enabled, the CLI prints JSON first
+   and leaves the concise answer or report at the end of stdout.
 
-Current agent limitation: each turn plans one primary diagnosis skill, then calls
-`report_generator` as a deterministic finishing step. The current result shape is:
+The current result shape is:
 
-- `plan.mode`: `single_step`
-- `plan.skill`: the single primary diagnosis skill selected by the LLM
-- `observation`: the primary diagnosis skill observation
+- `plan.mode`: `multi_step`
+- `plan.candidate_skills`: ordered diagnostic Skill candidates selected by the LLM
+- `observations`: diagnostic observations in execution order
+- `observation`: the first diagnostic observation, kept for backward-compatible demos
+- `repair_plan` / `repair_observation`: present when a repairable abnormality is found
+- `retest_plan` / `retest_observation`: present only after a real repair execution
+- `unresolved_issues`: abnormal layers not repaired in the current turn
 - `report_observation`: the deterministic `report_generator` output
-- `executed_steps`: the actual diagnosis and report steps, including each step's
-  phase, step number, skill, arguments, reason, observation key, and next action.
-
-Future multi-step diagnosis should switch to `plan.mode = "multi_step"` and return
-`observations: []`, where each diagnosis skill has its own arguments, observation,
-reason for continuing or stopping, and `observation_key` such as `observations[0]`.
+- `executed_steps`: the actual diagnosis, repair, retest and report steps.
 
 ## Skill Set
 
@@ -55,7 +61,8 @@ diagnosis milestone has also been implemented:
 - Core abstractions: `Skill`, schema validation, `SkillRegistry`.
 - Utilities: command execution, platform detection, shared JSON observation types.
 - Real Skills: `link_status`, `routing_diagnosis`, `service_connectivity`,
-  `dns_diagnosis`, `proxy_vpn_diagnosis`, `report_generator`.
+  `dns_diagnosis`, `proxy_vpn_diagnosis`, `network_quality`, `repair_actions`,
+  `report_generator`.
 - LLM-backed controller: planner, agent and synthesizer.
 - CLI entry points:
   - `scripts/run_link_status.py`
@@ -63,6 +70,7 @@ diagnosis milestone has also been implemented:
   - `scripts/run_routing_diagnosis.py`
   - `scripts/run_service_connectivity.py`
   - `scripts/run_proxy_vpn_diagnosis.py`
+  - `scripts/run_network_quality.py`
   - `scripts/ask_agent.py`
 
 `link_status` checks active non-loopback adapters, usable IP addresses, default
@@ -79,6 +87,49 @@ interfaces.
 with Python `socket.getaddrinfo()`, records resolution latency and IP addresses, falls
 back to `nslookup` when Python resolution fails, and compares direct access to resolved
 public IPs.
+
+`network_quality` currently checks ping-based quality only. It records sent/received
+packet counts, packet-loss percentage, min/avg/max latency and a multi-target ranking.
+Speedtest, download throughput and jitter are intentionally left for later milestones.
+Real interaction prompts and an isolated abnormal namespace setup are documented in
+`docs/network_quality_validation.md`.
+
+`repair_actions` plans or executes risk-gated repair actions. It defaults to dry-run
+and records command plans in JSON observations. `none` actions are read-only
+inspection, `low` actions cover DNS cache refresh and NetDoc temporary cache cleanup,
+`medium` actions cover Git proxy cleanup, system proxy disable and proxy service
+restart, and `high` actions cover DNS server, route and network interface changes.
+If an action's risk is less than or equal to the current `allowed_risk`, it can run
+without an extra confirmation signal. If an action's risk is higher than
+`allowed_risk`, execution requires the exact internal confirmation phrase
+`EXECUTE <action>`.
+
+`ask_agent.py` carries an `allowed_risk` runtime setting. Non-interactive runs can set
+it with `--allowed-risk`; interactive mode supports `/risk` to inspect and
+`/risk none|low|medium|high` to change it during the session. The agent injects this
+runtime setting into `repair_actions` plans so the LLM cannot silently raise the
+allowed repair risk.
+
+Repair execution is separately gated by `--execute-repair` or interactive
+`/repair on|off`. Repairs above the current risk threshold need a confirmation
+signal. In interactive mode this is exposed only as a `yes`/`no` prompt; the CLI
+converts `yes` into the exact internal confirmation phrase required by
+`repair_actions`. The agent does not let the LLM call `repair_actions` directly
+during planning; the planner selects diagnostic candidates, and the controller
+chooses repair only after concrete abnormal observations exist.
+In interactive mode, when execution is enabled and the only blocker is the missing
+confirmation phrase for an above-threshold action, the CLI prints the action, risk
+level and planned commands, then prompts for `yes` or `no`. A `yes` response
+automatically retries the same turn with the exact confirmation phrase.
+
+Interactive mode keeps a small in-memory session state for unresolved follow-up.
+After each turn, `unresolved_issues` from the agent result replace the current
+follow-up queue. `/issues` prints that queue, `/issues clear` clears it, and
+`/continue` builds a follow-up question from the previous question, previous answer
+and unresolved issue JSON. This state is process-local and is not persisted to disk.
+Dry-run repairs or repairs blocked by risk policy remain in `unresolved_issues` with
+their proposed `repair_plan`, so the user can inspect first, then enable execution
+and continue the same issue in the next interaction.
 
 ## Test Policy
 

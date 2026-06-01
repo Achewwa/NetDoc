@@ -142,6 +142,8 @@ def _messages_url(base_url: str) -> str:
 
 def _content_text(response: dict[str, object]) -> str:
     content = response["content"]
+    if isinstance(content, str):
+        return content.strip()
     if not isinstance(content, list):
         raise TypeError("content must be a list")
 
@@ -153,9 +155,34 @@ def _content_text(response: dict[str, object]) -> str:
                 parts.append(text)
 
     text_response = "\n".join(parts).strip()
-    if not text_response:
-        raise TypeError("response contained no text content")
-    return text_response
+    if text_response:
+        return text_response
+
+    fallback_parts = _fallback_content_strings(content)
+    fallback_response = "\n".join(fallback_parts).strip()
+    if fallback_response:
+        return fallback_response
+    raise TypeError("response contained no text content")
+
+
+def _fallback_content_strings(content: list[object]) -> list[str]:
+    """Extract text-like fields from non-standard Messages-compatible blocks.
+
+    Some Anthropic-compatible endpoints return reasoning-only blocks such as
+    {"type": "thinking", "thinking": "... final JSON ..."} without a text block.
+    Planner parsing can still recover structured JSON from that content.
+    """
+    fallback_keys = ("thinking", "reasoning", "reasoning_content", "content")
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        for key in fallback_keys:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value)
+                break
+    return parts
 
 
 def _truncate(value: str, limit: int = 500) -> str:
