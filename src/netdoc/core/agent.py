@@ -23,9 +23,16 @@ class AgentResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible representation for CLI debug output."""
+        diagnosis_next_action = "report" if self.report_observation is not None else "stop"
+        diagnosis_next_reason = (
+            "单步诊断已完成，进入 report_generator 汇总报告。"
+            if self.report_observation is not None
+            else "该轮没有后续报告生成步骤。"
+        )
         result: dict[str, Any] = {
             "answer": self.answer,
             "plan": {
+                "mode": "single_step",
                 "skill": self.plan.skill_name,
                 "arguments": self.plan.arguments,
                 "reason": self.plan.reason,
@@ -33,9 +40,13 @@ class AgentResult:
             "executed_steps": [
                 {
                     "phase": "diagnosis",
+                    "step": 1,
                     "skill": self.plan.skill_name,
                     "arguments": self.plan.arguments,
+                    "reason": self.plan.reason,
                     "observation_key": "observation",
+                    "next_action": diagnosis_next_action,
+                    "next_reason": diagnosis_next_reason,
                 }
             ],
             "observation": self.observation,
@@ -44,7 +55,9 @@ class AgentResult:
             result["executed_steps"].append(
                 {
                     "phase": "report",
+                    "step": 2,
                     "skill": "report_generator",
+                    "arguments": {"observations": ["observation"]},
                     "observation_key": "report_observation",
                 }
             )
@@ -129,4 +142,4 @@ def _synthesis_prompt(question: str, plan: SkillCall, observation: JsonDict) -> 
 
 
 def _skill_call_json(plan: SkillCall) -> dict[str, JsonDict | str]:
-    return {"skill": plan.skill_name, "arguments": plan.arguments}
+    return {"skill": plan.skill_name, "arguments": plan.arguments, "reason": plan.reason}

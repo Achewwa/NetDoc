@@ -80,16 +80,28 @@ def test_agent_plans_executes_and_synthesizes(monkeypatch) -> None:
         "report_markdown"
     ]
     assert result.to_dict()["report_observation"]["skill"] == "report_generator"
+    assert result.to_dict()["plan"] == {
+        "mode": "single_step",
+        "skill": "service_connectivity",
+        "arguments": {"host": "github.com", "ports": [443, 22], "protocols": ["tcp", "https"]},
+        "reason": "check GitHub",
+    }
     assert result.to_dict()["executed_steps"] == [
         {
             "phase": "diagnosis",
+            "step": 1,
             "skill": "service_connectivity",
             "arguments": {"host": "github.com", "ports": [443, 22], "protocols": ["tcp", "https"]},
+            "reason": "check GitHub",
             "observation_key": "observation",
+            "next_action": "report",
+            "next_reason": "单步诊断已完成，进入 report_generator 汇总报告。",
         },
         {
             "phase": "report",
+            "step": 2,
             "skill": "report_generator",
+            "arguments": {"observations": ["observation"]},
             "observation_key": "report_observation",
         },
     ]

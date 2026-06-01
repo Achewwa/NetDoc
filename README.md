@@ -47,7 +47,7 @@ scripts/      本地开发和演示脚本。
 
 项目已完成第一个可演示里程碑：`link_status`、`routing_diagnosis`、
 `service_connectivity`、`dns_diagnosis`、`proxy_vpn_diagnosis`、
-`report_generator` Skill 和
+`network_quality`、`report_generator` Skill 和
 LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM
 规划 Skill 调用，执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation
 生成中文诊断结论。
@@ -67,6 +67,7 @@ LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言
 - `skills.service_connectivity`：检查目标主机 DNS、TCP 端口和 HTTPS/TLS 连通性。
 - `skills.dns_diagnosis`：检查当前 DNS 配置、域名解析耗时、解析结果 IP，以及直接公网 IP 访问对比。
 - `skills.proxy_vpn_diagnosis`：检查代理环境变量、Git proxy、系统代理、常见代理端口、GitHub 代理访问和 Clash/VPN 进程。
+- `skills.network_quality`：通过 ping 检查多个目标的平均延迟、丢包率，并给出目标质量排序。
 - `skills.report_generator`：把用户问题、Skill 调用、证据、结论、修复动作、复测结果和遗留问题汇总成课程展示报告。
 
 ## 本地运行
@@ -127,6 +128,15 @@ python scripts/run_dns_diagnosis.py github.com --timeout 3
 ```sh
 python scripts/run_proxy_vpn_diagnosis.py --timeout 3
 ```
+
+单独运行网络质量诊断 Skill：
+
+```sh
+python scripts/run_network_quality.py 223.5.5.5 8.8.8.8 github.com --count 4 --timeout 2
+```
+
+网络质量真实交互话术和异常网络 namespace 构造见
+`docs/network_quality_validation.md`。
 
 单独运行链路和路由诊断 Skill：
 

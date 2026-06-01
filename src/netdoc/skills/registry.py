@@ -6,6 +6,7 @@ from netdoc.core.registry import SkillRegistry
 
 from .dns_diagnosis import skill as dns_diagnosis
 from .link_status import skill as link_status
+from .network_quality import skill as network_quality
 from .proxy_vpn_diagnosis import skill as proxy_vpn_diagnosis
 from .report_generator import skill as report_generator
 from .routing_diagnosis import skill as routing_diagnosis
@@ -19,6 +20,7 @@ def create_default_registry() -> SkillRegistry:
     registry.register(dns_diagnosis)
     registry.register(routing_diagnosis)
     registry.register(proxy_vpn_diagnosis)
+    registry.register(network_quality)
     registry.register(report_generator)
     registry.register(service_connectivity)
     return registry

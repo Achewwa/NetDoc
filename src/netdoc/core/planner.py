@@ -81,7 +81,11 @@ def _planning_prompt(question: str, registry: SkillRegistry) -> str:
         '"github.com", ports [443, 22], and protocols ["tcp", "https"], unless the '
         "user specifically asks whether DNS resolution is working. For proxy, VPN, "
         "Clash, system proxy, Git proxy, http_proxy or https_proxy questions, prefer "
-        "proxy_vpn_diagnosis. Use report_generator only when the user asks to produce "
+        "proxy_vpn_diagnosis. For latency, packet loss, ping, network quality, slow "
+        "network or multi-target comparison questions, prefer network_quality. "
+        "For speedtest, download throughput or jitter questions, explain with "
+        "network_quality only if ping latency and packet loss are still useful. "
+        "Use report_generator only when the user asks to produce "
         "or summarize a diagnosis report from existing observations."
     )
 

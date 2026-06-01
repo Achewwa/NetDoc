@@ -55,7 +55,7 @@ diagnosis milestone has also been implemented:
 - Core abstractions: `Skill`, schema validation, `SkillRegistry`.
 - Utilities: command execution, platform detection, shared JSON observation types.
 - Real Skills: `link_status`, `routing_diagnosis`, `service_connectivity`,
-  `dns_diagnosis`, `proxy_vpn_diagnosis`, `report_generator`.
+  `dns_diagnosis`, `proxy_vpn_diagnosis`, `network_quality`, `report_generator`.
 - LLM-backed controller: planner, agent and synthesizer.
 - CLI entry points:
   - `scripts/run_link_status.py`
@@ -63,6 +63,7 @@ diagnosis milestone has also been implemented:
   - `scripts/run_routing_diagnosis.py`
   - `scripts/run_service_connectivity.py`
   - `scripts/run_proxy_vpn_diagnosis.py`
+  - `scripts/run_network_quality.py`
   - `scripts/ask_agent.py`
 
 `link_status` checks active non-loopback adapters, usable IP addresses, default
@@ -79,6 +80,12 @@ interfaces.
 with Python `socket.getaddrinfo()`, records resolution latency and IP addresses, falls
 back to `nslookup` when Python resolution fails, and compares direct access to resolved
 public IPs.
+
+`network_quality` currently checks ping-based quality only. It records sent/received
+packet counts, packet-loss percentage, min/avg/max latency and a multi-target ranking.
+Speedtest, download throughput and jitter are intentionally left for later milestones.
+Real interaction prompts and an isolated abnormal namespace setup are documented in
+`docs/network_quality_validation.md`.
 
 ## Test Policy
 
