@@ -8,10 +8,12 @@ from netdoc.core import SchemaValidationError, Skill, SkillRegistry
 from netdoc.skills import service_connectivity
 from netdoc.skills import dns_diagnosis
 from netdoc.skills import proxy_vpn_diagnosis
+from netdoc.skills import repair_actions
 from netdoc.skills import report_generator
 from netdoc.skills import service_connectivity as service_skill
 from netdoc.skills import service_connectivity as service_skill_alias
 from netdoc.skills.service_connectivity import skill
+from netdoc.core.llm import _content_text
 from netdoc.utils.command import run_command
 from netdoc.utils.json_types import make_check
 
@@ -68,6 +70,30 @@ def test_run_command_reports_missing_executable() -> None:
     assert not result.timed_out
 
 
+def test_llm_content_text_prefers_text_blocks() -> None:
+    response = {
+        "content": [
+            {"type": "thinking", "thinking": "internal reasoning"},
+            {"type": "text", "text": '{"candidate_skills":[]}'},
+        ]
+    }
+
+    assert _content_text(response) == '{"candidate_skills":[]}'
+
+
+def test_llm_content_text_falls_back_to_thinking_blocks() -> None:
+    response = {
+        "content": [
+            {
+                "type": "thinking",
+                "thinking": 'reasoning...\n{"candidate_skills":[{"skill":"proxy_vpn_diagnosis","arguments":{}}]}',
+            }
+        ]
+    }
+
+    assert '"proxy_vpn_diagnosis"' in _content_text(response)
+
+
 def test_service_connectivity_summarizes_https_up_ssh_down(monkeypatch: pytest.MonkeyPatch) -> None:
     module = __import__("netdoc.skills.service_connectivity", fromlist=[""])
 
@@ -116,4 +142,5 @@ def test_skills_init_exports_service_connectivity() -> None:
     assert service_skill is service_skill_alias
     assert dns_diagnosis.name == "dns_diagnosis"
     assert proxy_vpn_diagnosis.name == "proxy_vpn_diagnosis"
+    assert repair_actions.name == "repair_actions"
     assert report_generator.name == "report_generator"

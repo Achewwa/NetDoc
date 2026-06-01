@@ -48,7 +48,7 @@ scripts/      本地开发和演示脚本。
 项目已完成第一个可演示里程碑：`link_status`、`routing_diagnosis`、
 `service_connectivity`、`dns_diagnosis`、`proxy_vpn_diagnosis`、
 `network_quality`、`report_generator` Skill 和
-LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM
+`repair_actions` Skill 以及 LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM
 规划 Skill 调用，执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation
 生成中文诊断结论。
 
@@ -68,6 +68,7 @@ LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言
 - `skills.dns_diagnosis`：检查当前 DNS 配置、域名解析耗时、解析结果 IP，以及直接公网 IP 访问对比。
 - `skills.proxy_vpn_diagnosis`：检查代理环境变量、Git proxy、系统代理、常见代理端口、GitHub 代理访问和 Clash/VPN 进程。
 - `skills.network_quality`：通过 ping 检查多个目标的平均延迟、丢包率，并给出目标质量排序。
+- `skills.repair_actions`：按 none/low/medium/high 风险等级规划或执行修复动作，默认 dry-run；动作风险高于当前风险等级时必须显式确认。
 - `skills.report_generator`：把用户问题、Skill 调用、证据、结论、修复动作、复测结果和遗留问题汇总成课程展示报告。
 
 ## 本地运行
@@ -92,16 +93,18 @@ export ANTHROPIC_MODEL="your-model"
 python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还是 SSH 问题？" --show-json
 ```
 
-`--show-json` 会展示当前单步 agent loop 的结构化结果：
+`--show-json` 会展示当前 agent loop 的结构化结果；启用时先输出 JSON，最后再输出简短诊断答案或报告，避免长 JSON 把最终结论顶出可视区域：
 
-- `plan.mode` 固定为 `single_step`，`plan.skill` 是 LLM 选择的一个主诊断 Skill。
-- `observation` 是该主诊断 Skill 的结果。
+- `plan.mode` 为 `multi_step`，`plan.candidate_skills` 是 LLM 选择的候选诊断 Skill 列表。
+- `observations` 是按顺序收集到的诊断结果；`observation` 保留第一条诊断结果，兼容旧展示。
+- 如果诊断 observation 显示异常，agent 会选择一个可安全映射的 `repair_actions` 修复计划。
+- `repair_observation` 记录修复动作是 dry-run、被风险门禁阻止，还是已执行。
+- `retest_observation` 仅在修复真实执行后出现，用原诊断 Skill 复测。
 - `report_observation` 是 agent 在诊断后自动调用 `report_generator` 生成的收尾报告。
-- `executed_steps` 记录实际执行步骤，包括诊断步骤和报告步骤；每步包含 `step`、`phase`、`skill`、`arguments`、`reason` 和 observation 引用。
+- `executed_steps` 记录实际执行步骤，包括诊断、修复、复测和报告步骤。
 
-当前还没有实现“一个问题连续调用多个诊断 Skill”。未来多步诊断应改为
-`plan.mode = "multi_step"`，并用 `observations: []` 存放每个诊断 Skill 的结果，
-`executed_steps` 再记录每一步为什么继续或停止。
+当前策略会先执行候选诊断列表，收集所有候选异常，再只自动尝试一个可映射修复动作；
+其他异常会进入 `unresolved_issues`，避免一发现问题就停止导致漏诊。
 
 课程展示或报告材料准备时，可以直接打印 `report_generator` 的 Markdown 报告：
 
@@ -111,11 +114,43 @@ python scripts/ask_agent.py "GitHub 通过代理访问失败，检查 Git proxy�
 
 使用 `--show-report` 时，终端只打印报告正文，不重复打印简短诊断答案。
 
+涉及 `repair_actions` 时，`ask_agent.py` 默认只允许 `none` 风险等级。可以用
+`--allowed-risk` 设置当前会话允许的最高修复风险。默认仍是 dry-run；如果要允许真实修复，
+还需要加 `--execute-repair`。动作风险小于等于当前风险等级时可自动执行；动作风险高于
+当前风险等级时，交互模式会要求用户用 `yes` 或 `no` 确认；非交互模式不会越权执行：
+
+```sh
+python scripts/ask_agent.py "帮我生成刷新 DNS 缓存的修复计划" --allowed-risk low --show-json
+python scripts/ask_agent.py "检查 DNS，确认有问题后刷新缓存" --allowed-risk low --execute-repair --show-json
+```
+
 也可以进入交互模式：
 
 ```sh
 python scripts/ask_agent.py --show-json
 ```
+
+交互模式中可输入 `/risk` 查看当前风险等级，或输入 `/risk none`、`/risk low`、
+`/risk medium`、`/risk high` 动态切换。输入 `/repair on|off` 切换真实执行或
+dry-run。如果交互模式中已经开启 `/repair on`，但动作风险高于当前风险等级，
+CLI 会展示动作、风险等级和待执行命令，然后等待输入 `yes` 或 `no`；输入 `yes`
+后会重跑本轮并执行该次确认的修复。
+
+如果上一轮结果里还有 `unresolved_issues`，交互模式可以继续处理：
+
+```text
+/issues
+/continue
+/continue 优先检查代理和路由
+/issues clear
+```
+
+`/continue` 会把上一轮问题、回答和未解决项作为上下文传给 agent，继续规划后续诊断；
+该状态只保存在当前交互进程内，不写入磁盘。
+如果上一轮只是 dry-run 或因风险确认不足而没有真实修复，原异常会继续保留在
+`unresolved_issues`，因此可以先检查，再输入 `/repair on`，最后用
+`/continue 帮我修复` 接着处理；若修复风险高于当前风险等级，交互界面会再次用
+`yes`/`no` 询问是否执行。
 
 单独运行 DNS 诊断 Skill：
 
@@ -127,6 +162,15 @@ python scripts/run_dns_diagnosis.py github.com --timeout 3
 
 ```sh
 python scripts/run_proxy_vpn_diagnosis.py --timeout 3
+```
+
+单独运行修复动作 Skill，默认只生成计划，不修改系统：
+
+```sh
+python scripts/run_repair_actions.py inspect_supported_actions
+python scripts/run_repair_actions.py flush_dns_cache
+python scripts/run_repair_actions.py flush_dns_cache --execute --allowed-risk low
+python scripts/run_repair_actions.py clear_git_proxy_config --allowed-risk medium
 ```
 
 单独运行网络质量诊断 Skill：
