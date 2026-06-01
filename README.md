@@ -45,8 +45,9 @@ scripts/      本地开发和演示脚本。
 
 ## 当前状态
 
-项目已完成第一个可演示里程碑：`service_connectivity`、`dns_diagnosis`、
-`proxy_vpn_diagnosis`、`report_generator` Skill 和
+项目已完成第一个可演示里程碑：`link_status`、`routing_diagnosis`、
+`service_connectivity`、`dns_diagnosis`、`proxy_vpn_diagnosis`、
+`report_generator` Skill 和
 LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言问题开始，由 LLM
 规划 Skill 调用，执行真实 DNS/TCP/HTTPS 检查，再由 LLM 基于 JSON observation
 生成中文诊断结论。
@@ -61,6 +62,8 @@ LLM-backed agent 命令行入口已经打通。当前系统可以从自然语言
 - `utils.command`：统一系统命令执行结果，包含 timeout、返回码、stdout、stderr。
 - `utils.platform`：Windows、Linux、WSL 平台判断。
 - `utils.json_types`：统一 observation/check JSON 结构。
+- `skills.link_status`：检查网卡启用状态、可用 IP、默认网关和网关可达性，WSL 中会用邻居表辅助判断禁 ICMP 的网关。
+- `skills.routing_diagnosis`：检查默认路由、多活跃网卡、VPN/虚拟网卡、WSL 网关和异常默认路由优先级。
 - `skills.service_connectivity`：检查目标主机 DNS、TCP 端口和 HTTPS/TLS 连通性。
 - `skills.dns_diagnosis`：检查当前 DNS 配置、域名解析耗时、解析结果 IP，以及直接公网 IP 访问对比。
 - `skills.proxy_vpn_diagnosis`：检查代理环境变量、Git proxy、系统代理、常见代理端口、GitHub 代理访问和 Clash/VPN 进程。
@@ -88,8 +91,16 @@ export ANTHROPIC_MODEL="your-model"
 python scripts/ask_agent.py "GitHub 连不上是 DNS 问题、HTTPS 问题，还是 SSH 问题？" --show-json
 ```
 
-`--show-json` 会展示 `executed_steps`、主诊断 Skill 的 observation，并在诊断完成后附带
-`report_generator` 生成的 `report_observation`。
+`--show-json` 会展示当前单步 agent loop 的结构化结果：
+
+- `plan.mode` 固定为 `single_step`，`plan.skill` 是 LLM 选择的一个主诊断 Skill。
+- `observation` 是该主诊断 Skill 的结果。
+- `report_observation` 是 agent 在诊断后自动调用 `report_generator` 生成的收尾报告。
+- `executed_steps` 记录实际执行步骤，包括诊断步骤和报告步骤；每步包含 `step`、`phase`、`skill`、`arguments`、`reason` 和 observation 引用。
+
+当前还没有实现“一个问题连续调用多个诊断 Skill”。未来多步诊断应改为
+`plan.mode = "multi_step"`，并用 `observations: []` 存放每个诊断 Skill 的结果，
+`executed_steps` 再记录每一步为什么继续或停止。
 
 课程展示或报告材料准备时，可以直接打印 `report_generator` 的 Markdown 报告：
 
@@ -117,6 +128,13 @@ python scripts/run_dns_diagnosis.py github.com --timeout 3
 python scripts/run_proxy_vpn_diagnosis.py --timeout 3
 ```
 
+单独运行链路和路由诊断 Skill：
+
+```sh
+python scripts/run_link_status.py --timeout 2
+python scripts/run_routing_diagnosis.py --timeout 2
+```
+
 ## 测试方式
 
 后续每个里程碑都按两类测试推进：
@@ -142,4 +160,17 @@ NetDoc：选择 proxy_vpn_diagnosis，在 Clash 直连或代理路径异常场�
 
 用户：GitHub 通过代理访问失败，检查 Git proxy、系统代理、Clash 端口和 VPN 进程
 NetDoc：选择 proxy_vpn_diagnosis，在 Git local proxy 指向未监听端口时定位残留 Git proxy 配置。
+```
+
+新增链路和路由真实/隔离环境验证：
+
+```text
+用户：帮我检查当前网卡是否启用、IP是否有效、默认网关是否存在和网关是否可达
+NetDoc：选择 link_status，输出 adapter_enabled、ip_address_valid、default_gateway_exists 和 gateway_reachable 证据。
+
+用户：检查默认路由、多网卡、VPN虚拟网卡、WSL网关和异常路由优先级
+NetDoc：选择 routing_diagnosis，输出 default_route、multiple_active_interfaces、vpn_virtual_interfaces、wsl_gateway 和 route_priority 证据。
+
+隔离环境：通过 Linux network namespace 构造缺省网关、不可达网关、多活跃网卡、重复默认路由 metric 和 tun0 VPN 虚拟网卡场景。
+NetDoc：对应输出缺失默认路由、网关不可达、多网卡风险、duplicate_best_default_metric 和 VPN 虚拟网卡证据。
 ```
